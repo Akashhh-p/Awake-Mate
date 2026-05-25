@@ -172,7 +172,14 @@ Start command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 The backend requires Python 3.10 for the pinned MediaPipe Face Mesh package. Render reads this from:
 
 ```text
+backend/.python-version
 backend/runtime.txt
+```
+
+If Render still selects a newer Python version, set this environment variable in the Render service:
+
+```text
+PYTHON_VERSION=3.10.13
 ```
 
 The backend does not need a webcam in deployment because the browser sends frames through `/ws/browser-monitor`.
