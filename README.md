@@ -169,6 +169,12 @@ Build command: pip install -r requirements.txt
 Start command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
+The backend requires Python 3.10 for the pinned MediaPipe Face Mesh package. Render reads this from:
+
+```text
+backend/runtime.txt
+```
+
 The backend does not need a webcam in deployment because the browser sends frames through `/ws/browser-monitor`.
 
 ### Frontend on Vercel or Netlify
