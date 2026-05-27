@@ -1,5 +1,8 @@
 import axios from "axios";
 
+const LOCAL_API_BASE = "http://127.0.0.1:8020";
+const PRODUCTION_API_BASE = "https://awakemate-backend.onrender.com";
+
 function resolveApiBase() {
   const configuredBase = import.meta.env.VITE_API_BASE?.trim();
   const isPlaceholder =
@@ -9,7 +12,11 @@ function resolveApiBase() {
 
   if (!isPlaceholder) return configuredBase.replace(/\/$/, "");
 
-  return window.location.origin;
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return LOCAL_API_BASE;
+  }
+
+  return PRODUCTION_API_BASE;
 }
 
 export const API_BASE = resolveApiBase();
