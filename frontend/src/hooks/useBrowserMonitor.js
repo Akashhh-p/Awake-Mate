@@ -29,6 +29,18 @@ const idleStatus = {
   break_due: false,
 };
 
+const modeLabels = {
+  study: "Study",
+  work: "Work",
+  driving: "Driving",
+};
+
+const scoreLabels = {
+  study: "Focus Score",
+  work: "Productivity Score",
+  driving: "Safety Score",
+};
+
 export function useBrowserMonitor(user = null, token = "") {
   const [status, setStatus] = useState(idleStatus);
   const [connected, setConnected] = useState(false);
@@ -262,7 +274,12 @@ export function useBrowserMonitor(user = null, token = "") {
   }
 
   function changeMode(mode) {
-    setStatus((previous) => ({ ...previous, mode }));
+    setStatus((previous) => ({
+      ...previous,
+      mode,
+      mode_label: modeLabels[mode] || previous.mode_label,
+      score_label: scoreLabels[mode] || previous.score_label,
+    }));
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ event: "change-mode", mode }));
     }
