@@ -15,12 +15,12 @@ export default function Dashboard({ status, settings, setSettings, alarm, monito
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm uppercase tracking-[0.28em] text-federalBlue">Real-time AI monitoring</p>
-          <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.2em] text-federalBlue sm:text-sm sm:tracking-[0.28em]">Real-time AI monitoring</p>
+          <h1 className="mt-2 text-2xl font-semibold sm:text-4xl">
             Stay sharp with <span className="text-gradient">AwakeMate</span>
           </h1>
-          <p className="mt-2 text-sm text-slate-600">Signed in as {user?.displayName || user?.email || user?.phoneNumber}</p>
+          <p className="mt-2 break-words text-sm text-slate-600">Signed in as {user?.displayName || user?.email || user?.phoneNumber}</p>
         </div>
         <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm">
           Mode: <span className="font-semibold text-slate-950">{status.mode_label}</span>
@@ -49,7 +49,7 @@ export default function Dashboard({ status, settings, setSettings, alarm, monito
       )}
 
       <div className="grid gap-5 xl:grid-cols-[1.45fr_0.85fr]">
-        <WebcamPanel status={status} previewStream={monitor.previewStream} />
+        <WebcamPanel status={status} previewStream={monitor.previewStream} monitor={monitor} />
         <ModeControls status={status} settings={settings} setSettings={setSettings} running={status.running} alarm={alarm} monitor={monitor} />
       </div>
     </div>

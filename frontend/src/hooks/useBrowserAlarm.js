@@ -50,6 +50,7 @@ export function useBrowserAlarm(status) {
       gainRef.current.disconnect();
       gainRef.current = null;
     }
+    navigator.vibrate?.(0);
   }
 
   function stopCurrentOscillator() {
@@ -89,6 +90,7 @@ export function useBrowserAlarm(status) {
           }
         }, Math.min(220, level.interval - 40));
       }
+      navigator.vibrate?.(levelName === "continuous" || levelName === "very_loud" ? [240, 120, 240] : [180, 100]);
     };
 
     playOnce();

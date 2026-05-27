@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
+  getRedirectResult,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
 } from "firebase/auth";
@@ -32,6 +34,11 @@ export default function Auth() {
   const describedBy = `${message ? "auth-message " : ""}${error ? "auth-error" : ""}`.trim() || undefined;
 
   useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) ensureUserProfile(result.user, result.user.displayName || "").catch(() => {});
+      })
+      .catch((exc) => setError(authError(exc, "Google login failed.")));
     return () => {
       verifierRef.current?.clear?.();
       verifierRef.current = null;
@@ -133,6 +140,10 @@ export default function Auth() {
     setError("");
     setLoading(true);
     try {
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
       const credential = await signInWithPopup(auth, googleProvider);
       await ensureUserProfile(credential.user, credential.user.displayName || "");
     } catch (exc) {

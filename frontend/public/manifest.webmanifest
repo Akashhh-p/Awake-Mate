@@ -1,0 +1,19 @@
+{
+  "name": "AwakeMate",
+  "short_name": "AwakeMate",
+  "description": "Real-time drowsiness detection and focus monitoring.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8fafc",
+  "theme_color": "#5e19f2",
+  "icons": [
+    {
+      "src": "/awake-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

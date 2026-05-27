@@ -45,6 +45,10 @@ export function useBrowserMonitor(user = null, token = "") {
   const [status, setStatus] = useState(idleStatus);
   const [connected, setConnected] = useState(false);
   const [previewStream, setPreviewStream] = useState(null);
+  const [cameraFacing, setCameraFacing] = useState("user");
+  const [cameraDevices, setCameraDevices] = useState([]);
+  const [wakeLockSupported] = useState(() => "wakeLock" in navigator);
+  const [wakeLockActive, setWakeLockActive] = useState(false);
   const socketRef = useRef(null);
   const streamRef = useRef(null);
   const videoRef = useRef(null);
@@ -52,6 +56,7 @@ export function useBrowserMonitor(user = null, token = "") {
   const timerRef = useRef(null);
   const frameTimeoutRef = useRef(null);
   const startAckRef = useRef(null);
+  const wakeLockRef = useRef(null);
   const inFlightRef = useRef(false);
   const runningRef = useRef(false);
 
@@ -122,6 +127,54 @@ export function useBrowserMonitor(user = null, token = "") {
     return socket;
   }
 
+  async function refreshCameraDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setCameraDevices(devices.filter((device) => device.kind === "videoinput"));
+    } catch {
+      setCameraDevices([]);
+    }
+  }
+
+  async function requestWakeLock() {
+    if (!("wakeLock" in navigator)) return;
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request("screen");
+      setWakeLockActive(true);
+      wakeLockRef.current.addEventListener("release", () => setWakeLockActive(false));
+    } catch {
+      setWakeLockActive(false);
+    }
+  }
+
+  async function releaseWakeLock() {
+    try {
+      await wakeLockRef.current?.release?.();
+    } catch {
+      // The lock may already be released by the browser.
+    } finally {
+      wakeLockRef.current = null;
+      setWakeLockActive(false);
+    }
+  }
+
+  function cameraErrorMessage(error) {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      return "Camera access is not supported in this browser. Use a recent Chrome, Edge, Safari, or Firefox over HTTPS.";
+    }
+    if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
+      return "Camera permission is blocked. Allow camera access in the browser settings, then start monitoring again.";
+    }
+    if (error?.name === "NotFoundError" || error?.name === "OverconstrainedError") {
+      return "No suitable camera was found. Try switching camera or connect a camera.";
+    }
+    if (error?.name === "NotReadableError") {
+      return "The camera is already in use by another app. Close that app and try again.";
+    }
+    return error?.message || "Could not start the camera on this device.";
+  }
+
   function waitForSocket(socket) {
     if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -181,12 +234,21 @@ export function useBrowserMonitor(user = null, token = "") {
       socket.send(JSON.stringify({ event: "start", mode, firebase_token: freshToken || token }));
       await startAccepted;
 
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(cameraErrorMessage());
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" },
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 360 },
+          facingMode: { ideal: cameraFacing },
+        },
         audio: false,
       });
       streamRef.current = stream;
       setPreviewStream(stream);
+      refreshCameraDevices();
+      requestWakeLock();
 
       const video = document.createElement("video");
       video.srcObject = stream;
@@ -224,11 +286,19 @@ export function useBrowserMonitor(user = null, token = "") {
         ...previous,
         running: false,
         eye_state: "Error",
-        error: error.message || "Could not start monitoring.",
+        error: cameraErrorMessage(error),
         frame: null,
         local_frame: null,
       }));
     }
+  }
+
+  async function switchCamera(nextFacing = cameraFacing === "user" ? "environment" : "user") {
+    setCameraFacing(nextFacing);
+    if (!runningRef.current) return;
+    const activeMode = status.mode || "study";
+    stop();
+    window.setTimeout(() => start(activeMode), 150);
   }
 
   function stopCamera() {
@@ -246,6 +316,7 @@ export function useBrowserMonitor(user = null, token = "") {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    releaseWakeLock();
     setPreviewStream(null);
     videoRef.current = null;
   }
@@ -292,6 +363,7 @@ export function useBrowserMonitor(user = null, token = "") {
   }
 
   useEffect(() => {
+    refreshCameraDevices();
     connectSocket();
     return () => {
       runningRef.current = false;
@@ -300,5 +372,28 @@ export function useBrowserMonitor(user = null, token = "") {
     };
   }, []);
 
-  return { status, connected, previewStream, start, stop, changeMode, stopAlarm };
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && runningRef.current && !wakeLockRef.current) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
+  return {
+    status,
+    connected,
+    previewStream,
+    cameraFacing,
+    cameraDevices,
+    wakeLockSupported,
+    wakeLockActive,
+    start,
+    stop,
+    changeMode,
+    stopAlarm,
+    switchCamera,
+  };
 }

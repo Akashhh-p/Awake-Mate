@@ -50,6 +50,7 @@ Mode settings are stored in SQLite in the `mode_settings` table.
 - Axios
 - Lucide React
 - Vite
+- PWA manifest and service worker for installable mobile app behavior
 
 ## Folder Structure
 
@@ -214,12 +215,46 @@ wss://your-backend-service.onrender.com
 
 Camera access in browsers requires HTTPS, so use deployed HTTPS URLs for public demos.
 
+### Firebase Backend Verification on Render
+
+The FastAPI backend verifies Firebase ID tokens before saving user-specific history. Set these on the Render backend service, not on Vercel:
+
+```text
+FIREBASE_PROJECT_ID=awake-mate
+FIREBASE_SERVICE_ACCOUNT_JSON=<full Firebase Admin SDK JSON>
+```
+
+Do not commit the service account JSON to GitHub. If you prefer not to paste multi-line JSON into Render, base64 encode the JSON file and use:
+
+```text
+FIREBASE_SERVICE_ACCOUNT_B64=<base64 Firebase Admin SDK JSON>
+```
+
+After changing Render environment variables, redeploy the backend.
+
 ## Important Camera Notes
 
-- Close other apps that use the webcam.
-- Allow camera access in Windows privacy settings.
-- If the dashboard says `User not detected`, the webcam is running but no face is visible.
-- If it says `Webcam not found or blocked`, another app may be using the camera.
+- AwakeMate uses `navigator.mediaDevices.getUserMedia()` so the camera comes from the current device: laptop webcam, phone front camera, tablet camera, or supported external webcam.
+- HTTPS is required for camera access on deployed sites. Localhost is allowed by browsers for development.
+- Mobile starts with the front camera by default. Use the camera switch control in Live Monitoring to change between front and back cameras.
+- Close other apps that use the camera.
+- Allow camera access in browser/device privacy settings.
+- If the dashboard says `User not detected`, the camera is running but no face is visible.
+- If it says the camera is blocked or already in use, check browser permissions and other camera apps.
+
+## Cross-Device Checklist
+
+Before calling a deployment production-ready, test these flows:
+
+- Login, signup, forgot password, and Google login on desktop and mobile.
+- Camera permission prompt on Chrome desktop, Edge desktop, Chrome Android, Safari iPhone/iPad, and Firefox desktop.
+- Front camera and back camera switching on phones/tablets.
+- Start Monitoring, Stop Session, Stop Alarm, and mode switching.
+- Alarm audio after pressing Start, because browsers require a user gesture before loud audio.
+- Mobile vibration alerts on Android browsers that support `navigator.vibrate()`.
+- Wake Lock behavior where supported; unsupported browsers show a fallback message.
+- Dashboard cards, webcam panel, settings, history, and charts at phone, tablet, laptop, and desktop widths.
+- PWA install prompt on supported browsers.
 
 ## Resume Description
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Camera, Radio } from "lucide-react";
+import { Camera, Maximize2, Radio, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 
 function glowClass(status) {
@@ -9,8 +9,9 @@ function glowClass(status) {
   return "shadow-violet";
 }
 
-export default function WebcamPanel({ status, previewStream }) {
+export default function WebcamPanel({ status, previewStream, monitor }) {
   const videoRef = useRef(null);
+  const panelRef = useRef(null);
   const alarmOn = status.alarm_status === "On";
 
   useEffect(() => {
@@ -18,24 +19,56 @@ export default function WebcamPanel({ status, previewStream }) {
     videoRef.current.srcObject = previewStream || null;
   }, [previewStream]);
 
+  function openFullscreen() {
+    panelRef.current?.requestFullscreen?.();
+  }
+
   return (
     <motion.section initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="glass rounded-xl p-4" aria-labelledby="live-monitoring-title">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="live-monitoring-title" className="text-lg font-semibold text-slate-950">Live Monitoring</h2>
-          <p className="text-sm text-slate-500">Webcam glow follows eye state in real time.</p>
+          <p className="text-sm text-slate-500">
+            Camera adapts to phones, tablets, and desktops.
+            {monitor?.wakeLockSupported ? (
+              <span className="ml-1">{monitor.wakeLockActive ? "Screen awake is active." : "Screen awake starts during monitoring."}</span>
+            ) : (
+              <span className="ml-1">Screen awake is not supported on this browser.</span>
+            )}
+          </p>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-federalBlue" role="status" aria-live="polite">
-          <Radio size={15} aria-hidden="true" />
-          {status.running ? "Streaming" : "Standby"}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => monitor?.switchCamera?.()}
+            disabled={status.running && !previewStream}
+            className="flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+            title="Switch front or back camera"
+          >
+            <RotateCcw size={15} aria-hidden="true" />
+            <span>{monitor?.cameraFacing === "environment" ? "Back" : "Front"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={openFullscreen}
+            className="flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            title="Open full-screen monitoring"
+          >
+            <Maximize2 size={15} aria-hidden="true" />
+            <span className="hidden sm:inline">Full screen</span>
+          </button>
+          <div className="flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-federalBlue" role="status" aria-live="polite">
+            <Radio size={15} aria-hidden="true" />
+            {status.running ? "Streaming" : "Standby"}
+          </div>
         </div>
       </div>
-      <div className={`relative aspect-video overflow-hidden rounded-xl border border-slate-200 bg-slate-950 ${glowClass(status)}`}>
+      <div ref={panelRef} className={`relative aspect-video min-h-[220px] overflow-hidden rounded-xl border border-slate-200 bg-slate-950 sm:min-h-0 ${glowClass(status)}`}>
         {previewStream ? (
           <video
             ref={videoRef}
             aria-label={`Live AwakeMate webcam feed. Current state: ${status.eye_state}.`}
-            className="h-full w-full scale-x-[-1] object-cover"
+            className={`h-full w-full object-cover ${monitor?.cameraFacing === "environment" ? "" : "scale-x-[-1]"}`}
             autoPlay
             muted
             playsInline
@@ -49,7 +82,7 @@ export default function WebcamPanel({ status, previewStream }) {
         <div className="absolute left-4 top-4 rounded-full bg-black/70 px-3 py-1 text-sm text-white backdrop-blur" aria-live="polite">
           {status.eye_state}
         </div>
-        <div className="absolute bottom-4 left-4 right-4 grid gap-2 rounded-xl bg-black/65 p-3 text-xs text-white backdrop-blur sm:grid-cols-4">
+        <div className="absolute bottom-3 left-3 right-3 grid grid-cols-2 gap-2 rounded-xl bg-black/65 p-3 text-xs text-white backdrop-blur sm:bottom-4 sm:left-4 sm:right-4 sm:grid-cols-4">
           <div>
             <span className="block text-white/70">EAR</span>
             <strong>{status.ear_value || 0}</strong>

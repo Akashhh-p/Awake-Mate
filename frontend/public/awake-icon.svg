@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">AwakeMate icon</title>
+  <rect width="512" height="512" rx="96" fill="#5e19f2"/>
+  <path d="M88 282h68l38-98 86 196 54-142 34 44h56" fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="366" cy="172" r="34" fill="#87deed"/>
+</svg>
