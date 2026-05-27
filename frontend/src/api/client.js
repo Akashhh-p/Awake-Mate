@@ -1,7 +1,26 @@
 import axios from "axios";
 
-export const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
-export const WS_BASE = API_BASE.replace("http", "ws");
+const LOCAL_API_BASE = "http://127.0.0.1:8020";
+const PRODUCTION_API_BASE = "https://awakemate-backend.onrender.com";
+
+function resolveApiBase() {
+  const configuredBase = import.meta.env.VITE_API_BASE?.trim();
+  const isPlaceholder =
+    !configuredBase ||
+    configuredBase.includes("your-render-backend-url") ||
+    configuredBase.includes("your-backend-service");
+
+  if (!isPlaceholder) return configuredBase.replace(/\/$/, "");
+
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return LOCAL_API_BASE;
+  }
+
+  return PRODUCTION_API_BASE;
+}
+
+export const API_BASE = resolveApiBase();
+export const WS_BASE = API_BASE.replace(/^http/, "ws");
 
 export const api = axios.create({
   baseURL: API_BASE,
