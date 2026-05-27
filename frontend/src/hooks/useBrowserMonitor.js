@@ -39,6 +39,7 @@ export function useBrowserMonitor(user = null, token = "") {
   const canvasRef = useRef(document.createElement("canvas"));
   const timerRef = useRef(null);
   const frameTimeoutRef = useRef(null);
+  const startAckRef = useRef(null);
   const inFlightRef = useRef(false);
   const runningRef = useRef(false);
 
@@ -58,6 +59,10 @@ export function useBrowserMonitor(user = null, token = "") {
     socket.onopen = () => setConnected(true);
     socket.onclose = () => {
       inFlightRef.current = false;
+      if (startAckRef.current) {
+        startAckRef.current.reject(new Error(`Monitoring connection closed before startup. Check ${WS_BASE.replace(/^ws/, "http")}.`));
+        startAckRef.current = null;
+      }
       setConnected(false);
       if (runningRef.current) {
         setStatus((previous) => ({
@@ -72,6 +77,10 @@ export function useBrowserMonitor(user = null, token = "") {
     };
     socket.onerror = () => {
       inFlightRef.current = false;
+      if (startAckRef.current) {
+        startAckRef.current.reject(new Error(`Monitoring connection failed. Check ${WS_BASE.replace(/^ws/, "http")}.`));
+        startAckRef.current = null;
+      }
       setConnected(false);
     };
     socket.onmessage = (event) => {
@@ -81,6 +90,15 @@ export function useBrowserMonitor(user = null, token = "") {
         frameTimeoutRef.current = null;
       }
       const payload = JSON.parse(event.data);
+      if (startAckRef.current) {
+        const { resolve, reject } = startAckRef.current;
+        startAckRef.current = null;
+        if (payload.running) {
+          resolve(payload);
+        } else {
+          reject(new Error(payload.error || "Backend did not start monitoring."));
+        }
+      }
       if (!runningRef.current && payload.running) return;
       setStatus((previous) => ({
         ...previous,
@@ -112,6 +130,32 @@ export function useBrowserMonitor(user = null, token = "") {
     });
   }
 
+  function waitForStartAck(socket) {
+    return new Promise((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        startAckRef.current = null;
+        reject(new Error(`Backend did not accept the monitoring session. Check ${WS_BASE.replace(/^ws/, "http")}.`));
+      }, 15000);
+
+      startAckRef.current = {
+        resolve: (payload) => {
+          clearTimeout(timeoutId);
+          resolve(payload);
+        },
+        reject: (error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        },
+      };
+
+      if (socket.readyState !== WebSocket.OPEN) {
+        startAckRef.current = null;
+        clearTimeout(timeoutId);
+        reject(new Error("Monitoring socket closed before the session could start."));
+      }
+    });
+  }
+
   async function start(mode) {
     if (runningRef.current) return;
     runningRef.current = true;
@@ -120,6 +164,11 @@ export function useBrowserMonitor(user = null, token = "") {
     try {
       const socket = connectSocket();
       await waitForSocket(socket);
+      const freshToken = user?.getIdToken ? await user.getIdToken(true) : token;
+      const startAccepted = waitForStartAck(socket);
+      socket.send(JSON.stringify({ event: "start", mode, firebase_token: freshToken || token }));
+      await startAccepted;
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" },
         audio: false,
@@ -133,9 +182,6 @@ export function useBrowserMonitor(user = null, token = "") {
       video.playsInline = true;
       await video.play();
       videoRef.current = video;
-
-      const freshToken = user?.getIdToken ? await user.getIdToken() : token;
-      socket.send(JSON.stringify({ event: "start", mode, firebase_token: freshToken || token }));
 
       timerRef.current = setInterval(() => {
         if (!videoRef.current || socket.readyState !== WebSocket.OPEN || inFlightRef.current) return;
@@ -158,6 +204,9 @@ export function useBrowserMonitor(user = null, token = "") {
       }, 250);
     } catch (error) {
       runningRef.current = false;
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ event: "stop" }));
+      }
       stopCamera();
       setStatus((previous) => ({
         ...previous,
@@ -180,6 +229,7 @@ export function useBrowserMonitor(user = null, token = "") {
       clearTimeout(frameTimeoutRef.current);
       frameTimeoutRef.current = null;
     }
+    startAckRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -190,6 +240,10 @@ export function useBrowserMonitor(user = null, token = "") {
 
   function stop() {
     runningRef.current = false;
+    if (startAckRef.current) {
+      startAckRef.current.reject(new Error("Monitoring startup was cancelled."));
+      startAckRef.current = null;
+    }
     stopCamera();
     setStatus((previous) => ({
       ...previous,

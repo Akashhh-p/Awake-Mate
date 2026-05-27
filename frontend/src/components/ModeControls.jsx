@@ -243,7 +243,7 @@ export default function ModeControls({ status, settings, setSettings, running, a
         </button>
         <button
           onClick={handleStop}
-          disabled={!running || sessionBusy}
+          disabled={!running}
           className="flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-semibold text-libertyRed transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Pause size={18} aria-hidden="true" />

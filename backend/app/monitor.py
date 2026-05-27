@@ -244,7 +244,7 @@ class MonitorService:
         delta = min(1.0, max(0.0, now - self._browser_last_tick))
         self._browser_last_tick = now
 
-        detection, annotated = self._browser_detector.process(frame)
+        detection, annotated = await asyncio.to_thread(self._browser_detector.process, frame)
         eye_state = detection.status
         alarm_level = "none"
         alarm_status = "Off"
