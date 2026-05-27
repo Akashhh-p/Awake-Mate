@@ -17,7 +17,7 @@ app = FastAPI(title="AwakeMate API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://awake-mate\.web\.app|https://awake-mate\.firebaseapp\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,7 +56,10 @@ def start_session(payload: StartRequest):
 @app.post("/stop-session", response_model=StatusResponse)
 @app.post("/api/stop-session", response_model=StatusResponse)
 def stop_session():
-    monitor.stop()
+    if monitor.is_browser_active:
+        monitor.stop_browser_session()
+    else:
+        monitor.stop()
     return public_status()
 
 
@@ -126,7 +129,10 @@ async def browser_monitor_socket(websocket: WebSocket):
                 status = monitor.start_browser_session(payload.get("mode", "study"), firebase_uid=decoded["uid"])
                 await websocket.send_json(status)
             elif event == "frame":
-                status = await monitor.process_browser_frame(payload.get("frame", ""))
+                try:
+                    status = await monitor.process_browser_frame(payload.get("frame", ""))
+                except Exception as exc:
+                    status = monitor.mark_error(f"Detection failed: {exc}")
                 await websocket.send_json(status)
             elif event == "change-mode":
                 status = monitor.change_mode(payload.get("mode", "study"))
@@ -140,4 +146,7 @@ async def browser_monitor_socket(websocket: WebSocket):
             else:
                 await websocket.send_json(monitor.snapshot())
     except WebSocketDisconnect:
+        monitor.stop_browser_session()
+    except Exception as exc:
+        monitor.mark_error(f"Monitoring socket failed: {exc}")
         monitor.stop_browser_session()

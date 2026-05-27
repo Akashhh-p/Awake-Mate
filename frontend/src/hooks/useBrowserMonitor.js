@@ -38,6 +38,7 @@ export function useBrowserMonitor(user = null, token = "") {
   const videoRef = useRef(null);
   const canvasRef = useRef(document.createElement("canvas"));
   const timerRef = useRef(null);
+  const frameTimeoutRef = useRef(null);
   const inFlightRef = useRef(false);
   const runningRef = useRef(false);
 
@@ -55,10 +56,30 @@ export function useBrowserMonitor(user = null, token = "") {
     const socket = new WebSocket(`${WS_BASE}/ws/browser-monitor`);
     socketRef.current = socket;
     socket.onopen = () => setConnected(true);
-    socket.onclose = () => setConnected(false);
-    socket.onerror = () => setConnected(false);
+    socket.onclose = () => {
+      inFlightRef.current = false;
+      setConnected(false);
+      if (runningRef.current) {
+        setStatus((previous) => ({
+          ...previous,
+          running: false,
+          eye_state: "Disconnected",
+          error: `Monitoring connection closed. Check the backend at ${WS_BASE.replace(/^ws/, "http")}.`,
+        }));
+        runningRef.current = false;
+        stopCamera();
+      }
+    };
+    socket.onerror = () => {
+      inFlightRef.current = false;
+      setConnected(false);
+    };
     socket.onmessage = (event) => {
       inFlightRef.current = false;
+      if (frameTimeoutRef.current) {
+        clearTimeout(frameTimeoutRef.current);
+        frameTimeoutRef.current = null;
+      }
       const payload = JSON.parse(event.data);
       if (!runningRef.current && payload.running) return;
       setStatus((previous) => ({
@@ -121,14 +142,20 @@ export function useBrowserMonitor(user = null, token = "") {
         const videoEl = videoRef.current;
         if (videoEl.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
         const canvas = canvasRef.current;
-        canvas.width = 480;
-        canvas.height = 270;
+        canvas.width = 320;
+        canvas.height = 180;
         const context = canvas.getContext("2d");
         context.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-        const frame = canvas.toDataURL("image/jpeg", 0.5);
+        const frame = canvas.toDataURL("image/jpeg", 0.45);
         inFlightRef.current = true;
         socket.send(JSON.stringify({ event: "frame", frame }));
-      }, 150);
+        frameTimeoutRef.current = window.setTimeout(() => {
+          setStatus((previous) => ({
+            ...previous,
+            error: "Detection is responding slowly. Keeping the camera live while the backend catches up.",
+          }));
+        }, 3500);
+      }, 250);
     } catch (error) {
       runningRef.current = false;
       stopCamera();
@@ -148,6 +175,10 @@ export function useBrowserMonitor(user = null, token = "") {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+    if (frameTimeoutRef.current) {
+      clearTimeout(frameTimeoutRef.current);
+      frameTimeoutRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -171,6 +202,8 @@ export function useBrowserMonitor(user = null, token = "") {
     }));
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ event: "stop" }));
+      socketRef.current.close();
+      socketRef.current = null;
     }
   }
 

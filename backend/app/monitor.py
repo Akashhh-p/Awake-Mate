@@ -89,6 +89,20 @@ class MonitorService:
         with self._lock:
             return dict(self.status)
 
+    @property
+    def is_browser_active(self) -> bool:
+        return self._browser_active
+
+    def mark_error(self, message: str) -> dict[str, Any]:
+        with self._lock:
+            self.status = dict(self.status) | {
+                "eye_state": "Error",
+                "alarm_status": "Off",
+                "error": message,
+            }
+        self._alarm.stop()
+        return self.snapshot()
+
     def register(self, websocket: Any) -> None:
         with self._clients_lock:
             self._clients.add(websocket)
