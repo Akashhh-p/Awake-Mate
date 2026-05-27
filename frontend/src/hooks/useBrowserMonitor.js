@@ -32,6 +32,7 @@ const idleStatus = {
 export function useBrowserMonitor(user = null, token = "") {
   const [status, setStatus] = useState(idleStatus);
   const [connected, setConnected] = useState(false);
+  const [previewStream, setPreviewStream] = useState(null);
   const socketRef = useRef(null);
   const streamRef = useRef(null);
   const videoRef = useRef(null);
@@ -99,10 +100,11 @@ export function useBrowserMonitor(user = null, token = "") {
       const socket = connectSocket();
       await waitForSocket(socket);
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 360, facingMode: "user" },
+        video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" },
         audio: false,
       });
       streamRef.current = stream;
+      setPreviewStream(stream);
 
       const video = document.createElement("video");
       video.srcObject = stream;
@@ -117,16 +119,16 @@ export function useBrowserMonitor(user = null, token = "") {
       timerRef.current = setInterval(() => {
         if (!videoRef.current || socket.readyState !== WebSocket.OPEN || inFlightRef.current) return;
         const videoEl = videoRef.current;
+        if (videoEl.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
         const canvas = canvasRef.current;
-        canvas.width = 640;
-        canvas.height = 360;
+        canvas.width = 480;
+        canvas.height = 270;
         const context = canvas.getContext("2d");
         context.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-        const frame = canvas.toDataURL("image/jpeg", 0.55);
-        setStatus((previous) => ({ ...previous, local_frame: frame }));
+        const frame = canvas.toDataURL("image/jpeg", 0.5);
         inFlightRef.current = true;
         socket.send(JSON.stringify({ event: "frame", frame }));
-      }, 120);
+      }, 150);
     } catch (error) {
       runningRef.current = false;
       stopCamera();
@@ -151,6 +153,7 @@ export function useBrowserMonitor(user = null, token = "") {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    setPreviewStream(null);
     videoRef.current = null;
   }
 
@@ -193,5 +196,5 @@ export function useBrowserMonitor(user = null, token = "") {
     };
   }, []);
 
-  return { status, connected, start, stop, changeMode, stopAlarm };
+  return { status, connected, previewStream, start, stop, changeMode, stopAlarm };
 }

@@ -282,7 +282,6 @@ class MonitorService:
 
         duration = (datetime.now() - self._session_start).total_seconds() if self._session_start else 0.0
         focus_score = calculate_focus_score(self._browser_alerts, self._browser_drowsy_time, duration)
-        self._overlay(annotated, eye_state, detection.ear, focus_score, self._browser_alerts)
 
         with self._lock:
             self.status = {
@@ -309,7 +308,7 @@ class MonitorService:
                 "alarm_muted": self._alarm_muted_until_open,
                 "error": None,
                 "last_screenshot": last_screenshot,
-                "frame": self._encode_frame(annotated),
+                "frame": None,
                 "break_due": bool(self.settings["break_reminder_minutes"])
                 and duration >= int(self.settings["break_reminder_minutes"]) * 60,
             }

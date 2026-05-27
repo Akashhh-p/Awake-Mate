@@ -49,7 +49,7 @@ export default function Dashboard({ status, settings, setSettings, alarm, monito
       )}
 
       <div className="grid gap-5 xl:grid-cols-[1.45fr_0.85fr]">
-        <WebcamPanel status={status} />
+        <WebcamPanel status={status} previewStream={monitor.previewStream} />
         <ModeControls status={status} settings={settings} setSettings={setSettings} running={status.running} alarm={alarm} monitor={monitor} />
       </div>
     </div>

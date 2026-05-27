@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Camera, Radio } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -9,9 +9,15 @@ function glowClass(status) {
   return "shadow-violet";
 }
 
-export default function WebcamPanel({ status }) {
-  const displayFrame = status.frame || status.local_frame;
+export default function WebcamPanel({ status, previewStream }) {
+  const videoRef = useRef(null);
   const alarmOn = status.alarm_status === "On";
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    videoRef.current.srcObject = previewStream || null;
+  }, [previewStream]);
+
   return (
     <motion.section initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="glass rounded-xl p-4" aria-labelledby="live-monitoring-title">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -25,8 +31,15 @@ export default function WebcamPanel({ status }) {
         </div>
       </div>
       <div className={`relative aspect-video overflow-hidden rounded-xl border border-slate-200 bg-slate-950 ${glowClass(status)}`}>
-        {displayFrame ? (
-          <img src={displayFrame} alt={`Live AwakeMate webcam feed. Current state: ${status.eye_state}.`} className="h-full w-full object-cover" />
+        {previewStream ? (
+          <video
+            ref={videoRef}
+            aria-label={`Live AwakeMate webcam feed. Current state: ${status.eye_state}.`}
+            className="h-full w-full scale-x-[-1] object-cover"
+            autoPlay
+            muted
+            playsInline
+          />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
             <Camera size={42} aria-hidden="true" />
