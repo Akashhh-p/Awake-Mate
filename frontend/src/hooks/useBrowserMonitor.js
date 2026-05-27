@@ -262,11 +262,15 @@ export function useBrowserMonitor(user = null, token = "") {
         const videoEl = videoRef.current;
         if (videoEl.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
         const canvas = canvasRef.current;
-        canvas.width = 320;
-        canvas.height = 180;
+        const sourceWidth = videoEl.videoWidth || 640;
+        const sourceHeight = videoEl.videoHeight || 360;
+        const maxFrameWidth = 640;
+        const scale = Math.min(1, maxFrameWidth / sourceWidth);
+        canvas.width = Math.max(240, Math.round(sourceWidth * scale));
+        canvas.height = Math.max(180, Math.round(sourceHeight * scale));
         const context = canvas.getContext("2d");
         context.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-        const frame = canvas.toDataURL("image/jpeg", 0.45);
+        const frame = canvas.toDataURL("image/jpeg", 0.58);
         inFlightRef.current = true;
         socket.send(JSON.stringify({ event: "frame", frame }));
         frameTimeoutRef.current = window.setTimeout(() => {
