@@ -11,7 +11,7 @@ ALARM_FILE = ASSETS_DIR / "alarm.mp3"
 
 DEFAULT_MODE_SETTINGS = [
     ("study", 3.0, "medium", 45, 1, 0),
-    ("work", 4.0, "soft_medium", 60, 1, 0),
+    ("work", 4.0, "soft", 60, 1, 0),
     ("driving", 1.5, "very_loud", 0, 0, 1),
 ]
 

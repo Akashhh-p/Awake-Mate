@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import analytics_summary, get_all_mode_settings, init_db, session_history
-from app.models import ChangeModeRequest, StartRequest, StatusResponse
+from app.database import analytics_summary, get_all_mode_settings, init_db, session_history, update_mode_settings
+from app.firebase_auth import require_firebase_user, verify_firebase_token, verify_websocket_token
+from app.models import ChangeModeRequest, ModeSettingsUpdate, StartRequest, StatusResponse
 from app.monitor import monitor
 
 init_db()
@@ -47,7 +48,8 @@ def status():
 @app.post("/start-session", response_model=StatusResponse)
 @app.post("/api/start-session", response_model=StatusResponse)
 def start_session(payload: StartRequest):
-    monitor.start(payload.mode)
+    decoded = verify_firebase_token(payload.firebase_token or "")
+    monitor.start(payload.mode, firebase_uid=decoded["uid"])
     return public_status()
 
 
@@ -74,20 +76,28 @@ def change_mode(payload: ChangeModeRequest):
 
 @app.get("/session-history")
 @app.get("/api/session-history")
-def get_session_history():
-    return session_history()
+def get_session_history(firebase_user: dict = Depends(require_firebase_user)):
+    return session_history(firebase_uid=firebase_user["uid"])
 
 
 @app.get("/analytics")
 @app.get("/api/analytics")
-def get_analytics():
-    return analytics_summary()
+def get_analytics(firebase_user: dict = Depends(require_firebase_user)):
+    return analytics_summary(firebase_uid=firebase_user["uid"])
 
 
 @app.get("/mode-settings")
 @app.get("/api/mode-settings")
 def mode_settings():
     return get_all_mode_settings()
+
+
+@app.put("/mode-settings", response_model=StatusResponse)
+@app.put("/api/mode-settings", response_model=StatusResponse)
+def save_mode_settings(payload: ModeSettingsUpdate):
+    saved = update_mode_settings(payload.model_dump())
+    monitor.apply_settings(saved)
+    return public_status()
 
 
 @app.websocket("/ws/monitor")
@@ -110,7 +120,10 @@ async def browser_monitor_socket(websocket: WebSocket):
             payload = await websocket.receive_json()
             event = payload.get("event")
             if event == "start":
-                status = monitor.start_browser_session(payload.get("mode", "study"))
+                decoded = await verify_websocket_token(websocket, payload.get("firebase_token"))
+                if decoded is None:
+                    continue
+                status = monitor.start_browser_session(payload.get("mode", "study"), firebase_uid=decoded["uid"])
                 await websocket.send_json(status)
             elif event == "frame":
                 status = await monitor.process_browser_frame(payload.get("frame", ""))

@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 
 const LEVELS = {
+  low: { frequency: 520, gain: 0.07, interval: 1100 },
   soft: { frequency: 620, gain: 0.08, interval: 900 },
-  medium: { frequency: 880, gain: 0.16, interval: 520 },
-  very_loud: { frequency: 1100, gain: 0.28, interval: 260 },
-  continuous: { frequency: 1250, gain: 0.34, interval: 0 },
+  medium: { frequency: 880, gain: 0.24, interval: 480 },
+  very_loud: { frequency: 1100, gain: 0.42, interval: 220 },
+  continuous: { frequency: 1250, gain: 0.48, interval: 0 },
 };
 
 export function useBrowserAlarm(status) {
@@ -12,14 +13,26 @@ export function useBrowserAlarm(status) {
   const oscillatorRef = useRef(null);
   const gainRef = useRef(null);
   const timerRef = useRef(null);
+  const unlockedRef = useRef(false);
 
-  function ensureAudio() {
+  async function ensureAudio() {
     if (!audioRef.current) {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       audioRef.current = new AudioContext();
     }
     if (audioRef.current.state === "suspended") {
-      audioRef.current.resume();
+      await audioRef.current.resume();
+    }
+    if (!unlockedRef.current) {
+      const audio = audioRef.current;
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      gain.gain.value = 0.0001;
+      oscillator.connect(gain);
+      gain.connect(audio.destination);
+      oscillator.start();
+      oscillator.stop(audio.currentTime + 0.03);
+      unlockedRef.current = true;
     }
   }
 
@@ -51,8 +64,8 @@ export function useBrowserAlarm(status) {
     }
   }
 
-  function startTone(levelName) {
-    ensureAudio();
+  async function startTone(levelName) {
+    await ensureAudio();
     stopTone();
     const level = LEVELS[levelName] || LEVELS.medium;
     const audio = audioRef.current;

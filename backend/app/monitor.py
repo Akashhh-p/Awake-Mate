@@ -19,6 +19,7 @@ from app.database import (
     get_mode_settings,
     init_db,
     insert_alert,
+    update_mode_settings,
     update_session_mode,
 )
 from app.detector import DrowsinessDetector
@@ -39,6 +40,8 @@ class MonitorService:
         self._clients_lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._session_id: int | None = None
+        self._user_id: int | None = None
+        self._firebase_uid: str | None = None
         self._session_start: datetime | None = None
         self._last_tick = time.time()
         self._closed_start: float | None = None
@@ -127,13 +130,28 @@ class MonitorService:
         update_session_mode(self._session_id, mode)
         return self.snapshot()
 
-    def start(self, mode: str) -> dict[str, Any]:
+    def apply_settings(self, settings: dict[str, Any]) -> dict[str, Any]:
+        saved = update_mode_settings(settings)
+        if saved["mode"] == self.mode:
+            self.settings = saved
+            with self._lock:
+                self.status = dict(self.status) | {
+                    "threshold_seconds": saved["threshold_seconds"],
+                    "break_reminder_minutes": saved["break_reminder_minutes"],
+                    "snooze_allowed": saved["snooze_allowed"],
+                    "emergency_mode": saved["emergency_mode"],
+                }
+        return self.snapshot()
+
+    def start(self, mode: str, user_id: int | None = None, firebase_uid: str | None = None) -> dict[str, Any]:
         self.change_mode(mode)
         if self.running:
             return self.snapshot()
 
         self.running = True
-        self._session_id = create_session(self.mode)
+        self._user_id = user_id
+        self._firebase_uid = firebase_uid
+        self._session_id = create_session(self.mode, user_id, firebase_uid)
         self._session_start = datetime.now()
         self._last_tick = time.time()
         self._closed_start = None
@@ -150,13 +168,15 @@ class MonitorService:
         self._thread.start()
         return self.snapshot()
 
-    def start_browser_session(self, mode: str) -> dict[str, Any]:
+    def start_browser_session(self, mode: str, user_id: int | None = None, firebase_uid: str | None = None) -> dict[str, Any]:
         self.change_mode(mode)
         if self._browser_active:
             return self.snapshot()
         self._browser_active = True
         self.running = True
-        self._session_id = create_session(self.mode)
+        self._user_id = user_id
+        self._firebase_uid = firebase_uid
+        self._session_id = create_session(self.mode, user_id, firebase_uid)
         self._session_start = datetime.now()
         self._browser_alerts = 0
         self._browser_awake_time = 0.0
@@ -175,6 +195,10 @@ class MonitorService:
         return self.snapshot()
 
     def stop_browser_session(self) -> dict[str, Any]:
+        if not self._browser_active and self._session_id is None:
+            with self._lock:
+                self.status = self._idle_status()
+            return self.snapshot()
         duration = (datetime.now() - self._session_start).total_seconds() if self._session_start else 0.0
         score = calculate_focus_score(self._browser_alerts, self._browser_drowsy_time, duration)
         self._finish_session(duration, score, self._browser_alerts, self._browser_awake_time, self._browser_drowsy_time)
@@ -189,6 +213,8 @@ class MonitorService:
                 "running": False,
                 "alarm_status": "Off",
                 "alarm_muted": False,
+                "frame": None,
+                "break_due": False,
             }
         return self.snapshot()
 
@@ -242,7 +268,7 @@ class MonitorService:
                     if not self._alert_saved_for_closure:
                         self._browser_alerts += 1
                         last_screenshot = self._save_screenshot(annotated)
-                        insert_alert(self._session_id, self.mode, alarm_level, closed_for, last_screenshot)
+                        insert_alert(self._session_id, self._user_id, self._firebase_uid, self.mode, alarm_level, closed_for, last_screenshot)
                         self._alert_saved_for_closure = True
                 else:
                     eye_state = "Eyes Closed"
@@ -321,7 +347,7 @@ class MonitorService:
 
     @staticmethod
     def _encode_frame(frame) -> str:
-        ok, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+        ok, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
         if not ok:
             return ""
         return "data:image/jpeg;base64," + base64.b64encode(buffer).decode("ascii")
@@ -330,15 +356,16 @@ class MonitorService:
         threshold = float(self.settings["threshold_seconds"])
         if closed_for < threshold:
             return "none"
-        if self.mode == "driving":
-            return "continuous" if closed_for >= threshold * 2 else "very_loud"
-        if self.mode == "work":
-            return "medium" if closed_for >= threshold + 2 else "soft"
-        return "medium" if closed_for < threshold * 2 else "continuous"
+        configured = str(self.settings.get("alarm_level") or "medium")
+        if configured == "low":
+            configured = "soft"
+        if configured == "continuous" or closed_for >= threshold * 2:
+            return "continuous"
+        return configured
 
     @staticmethod
     def _alarm_level_number(level: str) -> int:
-        return {"none": 0, "soft": 1, "medium": 2, "very_loud": 3, "continuous": 3}.get(level, 0)
+        return {"none": 0, "low": 1, "soft": 1, "medium": 2, "very_loud": 3, "continuous": 3}.get(level, 0)
 
     def _save_screenshot(self, frame) -> str:
         SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -369,6 +396,8 @@ class MonitorService:
             return
         finish_session(self._session_id, duration, score, alerts, awake, drowsy)
         self._session_id = None
+        self._user_id = None
+        self._firebase_uid = None
 
     def _loop(self) -> None:
         detector = None
@@ -437,6 +466,8 @@ class MonitorService:
                                 last_screenshot = self._save_screenshot(annotated)
                                 insert_alert(
                                     self._session_id,
+                                    self._user_id,
+                                    self._firebase_uid,
                                     self.mode,
                                     alarm_level,
                                     closed_for,

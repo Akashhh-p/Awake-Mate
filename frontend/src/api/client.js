@@ -8,13 +8,21 @@ export const api = axios.create({
   timeout: 8000,
 });
 
+export function setAuthToken(token) {
+  if (token) {
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common.Authorization;
+  }
+}
+
 export async function fetchStatus() {
   const { data } = await api.get("/status");
   return data;
 }
 
-export async function startMonitor(mode) {
-  const { data } = await api.post("/start-session", { mode });
+export async function startMonitor(mode, firebaseToken = null) {
+  const { data } = await api.post("/start-session", { mode, firebase_token: firebaseToken });
   return data;
 }
 
@@ -45,5 +53,10 @@ export async function fetchAnalytics() {
 
 export async function fetchModeSettings() {
   const { data } = await api.get("/mode-settings");
+  return data;
+}
+
+export async function saveModeSettings(settings) {
+  const { data } = await api.put("/mode-settings", settings);
   return data;
 }
